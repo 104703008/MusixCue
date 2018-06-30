@@ -26,6 +26,9 @@ artists = []
 releases = []
 artist2ArtistID = {}
 
+yt_sleep_interval = 10
+lyric_sleep_interval = 10
+
 with open('mard/mard_metadata.json') as f:
     for line in f.readlines():
         data = json.loads(line)
@@ -33,26 +36,42 @@ with open('mard/mard_metadata.json') as f:
             continue
         if 'Music' not in data['salesRank']:
             continue
-        if data['salesRank']['Music'] > 256: # we only care popular albums
+        if data['salesRank']['Music'] > 1234: # we only care popular albums
             continue
         if 'artist' not in data:
             continue
         if 'songs' in data:
             for s in data['songs']:
                 print("trying to get lyrics of {", "artist: ", data['artist'], "; album title: ", data['title'], "; track title: ", s['title'], "}", file=sys.stderr)
-                try:
-                    pass
-                    lyrics = lyricwikia.get_lyrics(data['artist'], s['title'])
-                    time.sleep(5) # let's be gentle
-                except Exception:
-                    pass
-                else:
+                lyrics = ""
+                for attempt_lyric in range(3):
                     try:
-                        youtube_link = get_yt_url(data['artist'] + " " + s['title']);
+                        time.sleep(lyric_sleep_interval)
+                        lyrics = lyricwikia.get_lyrics(data['artist'], s['title'])
+                    except lyricwikia.LyricsNotFound:
+                        print("lyric not found")
+                        break
                     except Exception as e:
-                        print(e)
+                        print("failed to get lyric, retrying...")
+                        lyric_sleep_interval *= 2
                     else:
-                        print(youtube_link)
+                        break
+                if lyrics != "":
+                    youtube_link = ""
+                    for attempt in range(10):
+                        try:
+                            time.sleep(yt_sleep_interval)
+                            youtube_link = get_yt_url(data['artist'] + " " + s['title']);
+                        except Exception as e:
+                            print("youtube exception: ", e)
+                            yt_sleep_interval *= 2
+                            print("new yt_sleep_interval = ", yt_sleep_interval)
+                        else:
+                            print(youtube_link)
+                            break
+                    else:
+                        print("fails to get the song link for the song...")
+                        continue
                     songs.append( { "pk": first_unused_songid
                                   , "model": "music.song"
                                   , "fields": { "SongID": first_unused_songid
